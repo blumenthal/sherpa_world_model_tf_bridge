@@ -1,0 +1,8 @@
+bin
+build
+lib
+msg_gen
+.project
+.cproject
+.settings
+.log
