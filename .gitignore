@@ -5,4 +5,4 @@ msg_gen
 .project
 .cproject
 .settings
-.log
+*.log
