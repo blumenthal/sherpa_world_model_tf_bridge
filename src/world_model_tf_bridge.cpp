@@ -36,6 +36,7 @@
 #include <brics_3d/worldModel/sceneGraph/HDF5UpdateDeserializer.h>
 #include <brics_3d/worldModel/sceneGraph/OutdatedDataIdAwareDeleter.h>
 #include <brics_3d/worldModel/sceneGraph/SceneGraphToUpdatesTraverser.h>
+#include <brics_3d/worldModel/sceneGraph/FrequencyAwareUpdateFilter.h>
 #include <brics_3d/core/Logger.h>
 #include <brics_3d/core/HomogeneousMatrix44.h>
 
@@ -108,6 +109,7 @@ public:
 //		std::string tmpFrameId = "/openni_depth_optical_frame";
 //		tfToSceneGraphMapping.insert(std::make_pair(tmpFrameId, tmpSceneGraphTransformSpec));
 
+		tfRootNode = "base_link";
 		enableFrameAutoDiscovery = true;
 
 		tfListener.addTransformsChangedListener(boost::bind(&WorldModelNode::processTfTopic, this));
@@ -124,20 +126,21 @@ public:
 		vector<Attribute> attributes;
 
 		/*
-		 * We initialize the worldmodel with a base_link - which is commonly seen in TF trees. It serves as root for the world
-		 * model as well.
+		 * We initialize the world model with any frame_id as defined by tfRootNode
+		 * e.g. "base_link" - which is commonly seen in TF trees.
+		 * It serves as root for the world model as well.
 		 */
-		brics_3d::rsg::Id baseLinkId = 0;
+		brics_3d::rsg::Id tfRootNodeId = 0;
 		attributes.clear();
-		attributes.push_back(Attribute("tf:frame_id","base_link"));
+		attributes.push_back(Attribute("tf:frame_id", tfRootNode));
 		brics_3d::HomogeneousMatrix44::IHomogeneousMatrix44Ptr initialBaseLinkTransform(new brics_3d::HomogeneousMatrix44());
-		wm->scene.addTransformNode(wm->scene.getRootId(), baseLinkId, attributes, initialBaseLinkTransform, wm->now());
+		wm->scene.addTransformNode(wm->scene.getRootId(), tfRootNodeId, attributes, initialBaseLinkTransform, wm->now());
 
 		SceneGraphTransformNodes tmpSceneGraphTransformSpec;
-		tmpSceneGraphTransformSpec.id = baseLinkId;
-		tmpSceneGraphTransformSpec.name = "base_link";
+		tmpSceneGraphTransformSpec.id = tfRootNodeId;
+		tmpSceneGraphTransformSpec.name = tfRootNode;
 		tmpSceneGraphTransformSpec.tfParent = "NO_PARENT";
-		std::string tmpFrameId = "base_link";
+		std::string tmpFrameId = tfRootNode;
 		tfToSceneGraphMapping.insert(std::make_pair(tmpFrameId, tmpSceneGraphTransformSpec));
 
 //		/* Here comes a basic robot skeleton in case of a manual setup */
@@ -313,6 +316,14 @@ public:
 
 	}
 
+	const std::string& getTfRootNode() const {
+		return tfRootNode;
+	}
+
+	void setTfRootNode(const std::string& tfRootNode) {
+		this->tfRootNode = tfRootNode;
+	}
+
 private:
 
 	/// THE world model based on the Robot Scene Graph (RSG).
@@ -331,6 +342,11 @@ private:
 
 	/// Turn on/off to automatically create corresponding RSG nodes based on all so far recieved TF frames.
 	bool enableFrameAutoDiscovery;
+
+	/// Root not to be considered for automatic discovery.
+	/// Typical values are "base_link", "map" or "odom"	.
+	/// Deafault is "base_link".
+	std::string tfRootNode;
 
 public:
 
@@ -362,7 +378,12 @@ int main(int argc, char **argv)
 	RsgRosOutputBridge* outBridge = new RsgRosOutputBridge(node, "world_model/update_stream");
 	HDF5UpdateSerializer* outSerializer = new HDF5UpdateSerializer(outBridge);
 	outSerializer->setStoreMessageBackupsOnFileSystem(false);
-	wm->scene.attachUpdateObserver(outSerializer); // direct attachment
+	FrequencyAwareUpdateFilter* frequencyFilter = new FrequencyAwareUpdateFilter();
+	frequencyFilter->setMaxTransformUpdateFrequency(1/*Hz*/);
+	/* chaines up ubserver: wm -> frequencyFilter -> outSerializer */
+	wm->scene.attachUpdateObserver(frequencyFilter);
+	frequencyFilter->attachUpdateObserver(outSerializer);
+
 
 	/* Initialize the application */
 	WorldModelNode wmNode(wm);
@@ -375,10 +396,7 @@ int main(int argc, char **argv)
 	wm->scene.advertiseRootNode(); 				// required by visualizer
 #endif
 
-	/* Setup communication */
-//	unsigned int topicBufferSize = 1; //sould be rather small, if processing is slower than the data source to prevent congestion
-//	ros::Subscriber pointCloudSubscriber;
-
+	wmNode.setTfRootNode("base_link");
 	wmNode.sceneSetup();
 	LOG(INFO) << "Ready.";
 
@@ -388,7 +406,7 @@ int main(int argc, char **argv)
 
 	//spinner.spin();
 
-	ros::Rate rate(0.1); // (in Hz)
+	ros::Rate rate(0.2); // (in Hz)
 	while (node.ok()){
 		ros::spinOnce();
 		wmNode.processTfTopic();
