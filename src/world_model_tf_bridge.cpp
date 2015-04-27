@@ -42,6 +42,7 @@
 
 /* BRICS_3D <-> ROS bindings*/
 #include "RsgRosBridge.h"
+#include "RsgToTFObserver.h"
 
 /* Application specific includes */
 
@@ -398,6 +399,10 @@ int main(int argc, char **argv)
 
 	wmNode.setTfRootNode("base_link");
 	wmNode.sceneSetup();
+
+	RsgToTFObserver rsgToTf;
+	wm->scene.attachUpdateObserver(&rsgToTf);
+
 	LOG(INFO) << "Ready.";
 
 	/* Let the node loop and process messages. */

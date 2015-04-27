@@ -160,7 +160,11 @@ catkin_package(
 
 ## Declare a cpp executable
 # add_executable(sherpa_world_model_tf_bridge_node src/sherpa_world_model_tf_bridge_node.cpp)
-add_executable(sherpa_world_model_tf_bridge src/world_model_tf_bridge.cpp src/RsgRosBridge.cpp)
+add_executable(sherpa_world_model_tf_bridge 
+    src/world_model_tf_bridge.cpp 
+    src/RsgRosBridge.cpp
+    src/RsgToTFObserver.cpp
+)
 
 set(WORLD_MODEL_LIBRARIES
         ${BRICS_3D_LIBRARIES}      
