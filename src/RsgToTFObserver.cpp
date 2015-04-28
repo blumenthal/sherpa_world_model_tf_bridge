@@ -137,6 +137,19 @@ bool RsgToTFObserver::setTransform(Id id,
 
 	LOG(DEBUG) << "RsgToTFObserver::setTransform.";
 
+
+	string tag = "ros_tf:frame_id";
+	vector<std::string> resultValues;
+	vector<Attribute> attributes;
+
+	wm->scene.getNodeAttributes(id, attributes);
+
+	if(getValuesFromAttributeList(attributes, tag, resultValues)) {
+		string frameId = resultValues[0]; // >=1
+		processTransformUpdate(frameId);
+		return true;
+	}
+
 	return false;
 }
 
@@ -175,7 +188,6 @@ Id RsgToTFObserver::getTfNodeByFrameId(std::string frameId) {
 
 	std::map <std::string, SceneGraphTransformNodes>::iterator iter = sceneGraphToTfMapping.find(frameId);
 	return iter->second.id;
-
 }
 
 void RsgToTFObserver::processTransformUpdate (string frameId) {
@@ -187,20 +199,23 @@ void RsgToTFObserver::processTransformUpdate (string frameId) {
 		LOG(ERROR) << "RsgToTFObserver::processTransformUpdate Frame with fram_id  " << frameId << " not contained in mapping list. Skipping it.";
 	} else {
 
-
 		geometry_msgs::TransformStamped tmpTransformMsg;
+		brics_3d::HomogeneousMatrix44::IHomogeneousMatrix44Ptr transformUpdate(new brics_3d::HomogeneousMatrix44());
+		if(!wm->scene.getTransform(getTfNodeByFrameId(frameId), wm->now(), transformUpdate)) {
+			LOG(WARNING) << "RsgToTFObserver::processTransformUpdate transform not found.";
+			return;
+		}
+		SceneGraphTypeCasts::convertTransformToRosMsg(transformUpdate, tmpTransformMsg);
 
+		/* add meta data */
 		tmpTransformMsg.header.stamp = ros::Time::now();
 		tmpTransformMsg.header.frame_id = it->second.tfParent;
 		tmpTransformMsg.child_frame_id = it->second.name;
 
-
-
+		/* push it out */
+		LOG(ERROR) << "RsgToTFObserver::processTransformUpdate emitting  frame " << frameId  << std::endl << *transformUpdate;
 		tfPublisher.sendTransform(tmpTransformMsg);
 	}
-
-
-
 }
 
 } /* namespace rsg */

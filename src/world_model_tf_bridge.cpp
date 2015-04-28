@@ -391,7 +391,8 @@ int main(int argc, char **argv)
 	wmNode.sceneSetup();
 
 	RsgToTFObserver rsgToTf(wm);
-	wm->scene.attachUpdateObserver(&rsgToTf);
+	//wm->scene.attachUpdateObserver(&rsgToTf);
+	frequencyFilter->attachUpdateObserver(&rsgToTf);
 
 	LOG(INFO) << "Ready.";
 
