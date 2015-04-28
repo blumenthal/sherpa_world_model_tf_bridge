@@ -1,6 +1,6 @@
 /******************************************************************************
  * BRICS_3D - 3D Perception and Modeling Library
- * Copyright (c) 2014, KU Leuven
+ * Copyright (c) 2015, KU Leuven
  *
  * Author: Sebastian Blumenthal
  *
@@ -26,8 +26,8 @@ using brics_3d::Logger;
 namespace brics_3d {
 namespace rsg {
 
-RsgToTFObserver::RsgToTFObserver() {
-
+RsgToTFObserver::RsgToTFObserver(WorldModel* wm) : wm(wm) {
+	enableFrameAutoDiscovery = true;
 }
 
 RsgToTFObserver::~RsgToTFObserver() {
@@ -52,7 +52,49 @@ bool RsgToTFObserver::addTransformNode(Id parentId, Id& assignedId,
 
 	LOG(DEBUG) << "RsgToTFObserver::addTransformNode.";
 
-	return true;
+	string tag = "ros_tf:frame_id";
+	vector<std::string> resultValues;
+	if(getValuesFromAttributeList(attributes, tag, resultValues)) {
+		string frameId = resultValues[0]; // >=1
+		LOG(DEBUG) << "RsgToTFObserver: A new transform node has been added that belongs to the smantic conteixt of : " << tag;
+
+		if(sceneGraphToTfMapping.find(frameId) == sceneGraphToTfMapping.end()) {
+
+			LOG(DEBUG) << "RsgToTFObserver: Frame with fram_id  " << frameId << " not yet contained in mapping list.";
+
+			/* get parent frame_id */
+			vector<Attribute> parentAttributes;
+			wm->scene.getNodeAttributes(parentId, parentAttributes);
+
+			resultValues.clear();
+			if(getValuesFromAttributeList(parentAttributes, tag, resultValues)) {
+				string parentFrameId = resultValues[0]; // >=1
+
+				LOG(DEBUG) << "RsgToTFObserver: parentFrameId is :" << parentFrameId;
+
+				SceneGraphTransformNodes tmpSceneGraphTransformSpec;
+				tmpSceneGraphTransformSpec.id = assignedId;
+				tmpSceneGraphTransformSpec.name = frameId;
+				tmpSceneGraphTransformSpec.tfParent = parentFrameId;
+				sceneGraphToTfMapping.insert(std::make_pair(frameId, tmpSceneGraphTransformSpec));
+
+				/* Immediatly push out this information */
+				processTransformUpdate(frameId);
+
+				return true;
+			} else {
+				LOG(WARNING) << "RsgToTFObserver: parentFrameId cannot be determined";
+			}
+
+
+
+		} else {
+			LOG(DEBUG) << "RsgToTFObserver: Already conteined in mapping list.";
+		}
+
+	}
+
+	return false;
 
 }
 
@@ -86,6 +128,7 @@ bool RsgToTFObserver::addConnection(Id parentId, Id& assignedId, vector<Attribut
 bool RsgToTFObserver::setNodeAttributes(Id id,
 		vector<Attribute> newAttributes) {
 
+	return true;
 }
 
 bool RsgToTFObserver::setTransform(Id id,
@@ -120,6 +163,45 @@ bool RsgToTFObserver::removeParent(Id id, Id parentId) {
 	return true;
 }
 
+bool RsgToTFObserver::tfNodeExistsInWorldModel(std::string frameId) {
+	return sceneGraphToTfMapping.find(frameId) != sceneGraphToTfMapping.end();
+}
+
+Id RsgToTFObserver::getTfNodeByFrameId(std::string frameId) {
+	if (!tfNodeExistsInWorldModel(frameId)) {
+		LOG(WARNING) << "getTfNodeByFrameId: a node with frameId " << frameId << " does not exist.";
+		return Id(0); // Nil value
+	}
+
+	std::map <std::string, SceneGraphTransformNodes>::iterator iter = sceneGraphToTfMapping.find(frameId);
+	return iter->second.id;
+
+}
+
+void RsgToTFObserver::processTransformUpdate (string frameId) {
+
+	/* retrieve data from mapping */
+	std::map <std::string, SceneGraphTransformNodes>::iterator it = sceneGraphToTfMapping.find(frameId);
+
+	if(it == sceneGraphToTfMapping.end()) {
+		LOG(ERROR) << "RsgToTFObserver::processTransformUpdate Frame with fram_id  " << frameId << " not contained in mapping list. Skipping it.";
+	} else {
+
+
+		geometry_msgs::TransformStamped tmpTransformMsg;
+
+		tmpTransformMsg.header.stamp = ros::Time::now();
+		tmpTransformMsg.header.frame_id = it->second.tfParent;
+		tmpTransformMsg.child_frame_id = it->second.name;
+
+
+
+		tfPublisher.sendTransform(tmpTransformMsg);
+	}
+
+
+
+}
 
 } /* namespace rsg */
 } /* namespace brics_3d */

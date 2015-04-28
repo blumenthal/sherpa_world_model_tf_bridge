@@ -1,6 +1,6 @@
 /******************************************************************************
  * BRICS_3D - 3D Perception and Modeling Library
- * Copyright (c) 2014, KU Leuven
+ * Copyright (c) 2015, KU Leuven
  *
  * Author: Sebastian Blumenthal
  *
@@ -20,16 +20,24 @@
 #ifndef RSG_RsgToTFObserver_H_
 #define RSG_RsgToTFObserver_H_
 
+/* RSG related headers */
 #include <brics_3d/worldModel/sceneGraph/ISceneGraphUpdateObserver.h>
 #include <brics_3d/worldModel/sceneGraph/Attribute.h>
 #include <brics_3d/util/Timer.h>
+
+/* ROS TF related headers */
+#include <tf/tf.h>
+#include <tf/transform_broadcaster.h>
+
+#include "SceneGraphTransformNodes.h"
+#include "SceneGraphTypeCasts.h"
 
 namespace brics_3d {
 namespace rsg {
 
 class RsgToTFObserver : public ISceneGraphUpdateObserver {
 public:
-	RsgToTFObserver();
+	RsgToTFObserver(WorldModel* wm);
 	virtual ~RsgToTFObserver();
 
 	/* implemetntations of observer interface */
@@ -47,8 +55,22 @@ public:
 	bool addParent(Id id, Id parentId);
     bool removeParent(Id id, Id parentId);
 
+
 private:
 
+    void processTransformUpdate (std::string frameId);
+    bool tfNodeExistsInWorldModel(std::string frameId);
+    brics_3d::rsg::Id getTfNodeByFrameId(std::string frameId);
+    brics_3d::rsg::Id getParentNodeByFrameId(std::string frameId);
+
+    tf::TransformBroadcaster tfPublisher;
+
+	std::map <std::string, SceneGraphTransformNodes> sceneGraphToTfMapping;
+
+	/// Turn on/off to automatically create corresponding RSG nodes based on all so far recieved TF frames.
+	bool enableFrameAutoDiscovery;
+
+	WorldModel* wm;
 
 };
 

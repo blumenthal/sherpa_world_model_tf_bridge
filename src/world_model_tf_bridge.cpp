@@ -43,9 +43,9 @@
 /* BRICS_3D <-> ROS bindings*/
 #include "RsgRosBridge.h"
 #include "RsgToTFObserver.h"
+#include "SceneGraphTransformNodes.h"
 
 /* Application specific includes */
-
 
 /* Optional visialization via OSG. This has to be enabled via a CMake option */
 #ifdef ENABLE_OSG
@@ -54,16 +54,6 @@
 
 using brics_3d::Logger;
 using namespace brics_3d::rsg;
-
-const static unsigned int INVALID_ID = 0;
-
-struct SceneGraphTransformNodes {
-public:
-	SceneGraphTransformNodes() : id(INVALID_ID){}
-	Id id;
-	std::string name;
-	std::string tfParent;
-};
 
 inline static void convertTfTransformToHomogeniousMatrix (const tf::Transform& tfTransform, brics_3d::IHomogeneousMatrix44::IHomogeneousMatrix44Ptr& transformMatrix)
 {
@@ -133,7 +123,7 @@ public:
 		 */
 		brics_3d::rsg::Id tfRootNodeId = 0;
 		attributes.clear();
-		attributes.push_back(Attribute("tf:frame_id", tfRootNode));
+		attributes.push_back(Attribute("ros_tf:frame_id", tfRootNode));
 		brics_3d::HomogeneousMatrix44::IHomogeneousMatrix44Ptr initialBaseLinkTransform(new brics_3d::HomogeneousMatrix44());
 		wm->scene.addTransformNode(wm->scene.getRootId(), tfRootNodeId, attributes, initialBaseLinkTransform, wm->now());
 
@@ -225,7 +215,7 @@ public:
 			/* Just add it */
 			brics_3d::rsg::Id wmFrameId = 0;
 			vector<Attribute> attributes;
-			attributes.push_back(Attribute("tf:frame_id",frameId));
+			attributes.push_back(Attribute("ros_tf:frame_id",frameId));
 			brics_3d::HomogeneousMatrix44::IHomogeneousMatrix44Ptr initialTransform(new brics_3d::HomogeneousMatrix44()); // gets anyways updated.
 			if(wm->scene.addTransformNode(getTfNodeByFrameId(parentId), wmFrameId, attributes, initialTransform, wm->now())) {
 
@@ -400,7 +390,7 @@ int main(int argc, char **argv)
 	wmNode.setTfRootNode("base_link");
 	wmNode.sceneSetup();
 
-	RsgToTFObserver rsgToTf;
+	RsgToTFObserver rsgToTf(wm);
 	wm->scene.attachUpdateObserver(&rsgToTf);
 
 	LOG(INFO) << "Ready.";
