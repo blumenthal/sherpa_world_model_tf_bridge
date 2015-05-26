@@ -365,8 +365,12 @@ int main(int argc, char **argv)
 	brics_3d::rsg::DotVisualizer structureVisualizer(&wm->scene);
 	wm->scene.attachUpdateObserver(&structureVisualizer);
 
+	/* Connect input port to world model */
+	brics_3d::rsg::HDF5UpdateDeserializer* inDeserializer = new brics_3d::rsg::HDF5UpdateDeserializer(wm);
+	RsgRosInputBridge* inBridge = new RsgRosInputBridge(inDeserializer, node, "world_model/update_stream");
+
 	/* Attach the outout filter + port */
-	RsgRosOutputBridge* outBridge = new RsgRosOutputBridge(node, "world_model/update_stream");
+	RsgRosOutputBridge* outBridge = new RsgRosOutputBridge(node, "world_model/update_stream_tf_bridge");
 	HDF5UpdateSerializer* outSerializer = new HDF5UpdateSerializer(outBridge);
 	outSerializer->setStoreMessageBackupsOnFileSystem(false);
 	FrequencyAwareUpdateFilter* frequencyFilter = new FrequencyAwareUpdateFilter();
