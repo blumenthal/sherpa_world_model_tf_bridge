@@ -358,9 +358,14 @@ public:
 			/* do the update */
 			ROS_INFO("updating transform");
 			brics_3d::HomogeneousMatrix44::IHomogeneousMatrix44Ptr transformUpdate(new brics_3d::HomogeneousMatrix44());
-//			tf2::Stamped<btTransform> btTransform;
+//			btTransform tmpBtTransform;
 //			tf2::convert(transform, btTransform);
-//			convertTfTransformToHomogeniousMatrix(btTransform, transformUpdate);
+//			const geometry_msgs::TransformStamped constTransform = transform;
+			btTransform tmpBtTransform = tf2::transformToBullet(transform);
+
+			tf2::Stamped<btTransform> btStampedTransform;
+			btStampedTransform.setData(tmpBtTransform);
+			convertTfTransformToHomogeniousMatrix(btStampedTransform, transformUpdate);
 			std::cout << *transformUpdate;
 
 			if (!wm->scene.setTransform(iter->second.id, transformUpdate, wm->now())) {
