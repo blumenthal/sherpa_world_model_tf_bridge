@@ -23,6 +23,11 @@ if __name__ == '__main__':
         br.sendTransform((1.0 * math.sin(t), 2.0 * math.cos(t), (0.1 * math.sin(2*t))+ 0.2),
                          q,			
                          rospy.Time.now(),
-                         "robot_1",
-                         "wgs84")
+                         "robot_1", # child
+                         "wgs84")   # parent
+	br.sendTransform((0.1, 0, 0),
+                         (0, 0 ,0 ,1),			
+                         rospy.Time.now(),
+                         "robot_1_base_link", # child
+                         "robot_1")   # parent
         rate.sleep()    	

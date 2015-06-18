@@ -6,10 +6,16 @@ project(sherpa_world_model_tf_bridge)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
-  tf	
+  tf
+  tf2
+  tf2_msgs 
+  tf2_bullet 
+  tf2_ros
+  tf2_kdl 
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS})
+MESSAGE(STATUS "INFO: used catkin_INCLUDE_DIRS: ${catkin_INCLUDE_DIRS}")
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)

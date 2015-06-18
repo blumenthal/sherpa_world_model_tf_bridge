@@ -23,9 +23,15 @@
 
 /* ROS includes */
 #include <ros/ros.h>
-#include <tf/tf.h>
-#include <tf/transform_listener.h>
-#include <tf/transform_broadcaster.h>
+//#include <tf/tf.h>
+//#include <tf/transform_listener.h> //@deprecated
+//#include <tf/transform_broadcaster.h> //@deprecated
+#include <tf2_bullet/tf2_bullet/tf2_bullet.h> // package.xml does not resolve this correctly
+#include <LinearMath/btTransform.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/transform_broadcaster.h>
 #include <std_msgs/ByteMultiArray.h> // update channel for world model
 
 /* BRICS_3D includes */
@@ -46,6 +52,7 @@
 #include "SceneGraphTransformNodes.h"
 
 /* Application specific includes */
+#include <boost/algorithm/string.hpp>
 
 /* Optional visialization via OSG. This has to be enabled via a CMake option */
 #ifdef ENABLE_OSG
@@ -55,11 +62,25 @@
 using brics_3d::Logger;
 using namespace brics_3d::rsg;
 
-inline static void convertTfTransformToHomogeniousMatrix (const tf::Transform& tfTransform, brics_3d::IHomogeneousMatrix44::IHomogeneousMatrix44Ptr& transformMatrix)
+//inline static void convertTfTransformToHomogeniousMatrix (const tf::Transform& tfTransform, brics_3d::IHomogeneousMatrix44::IHomogeneousMatrix44Ptr& transformMatrix)
+//{
+//	double mv[12];
+//	tfTransform.getBasis().getOpenGLSubMatrix(mv);
+//	tf::Vector3 origin = tfTransform.getOrigin();
+//	double* matrixPtr = transformMatrix->setRawData();
+//
+//	/* matrices are column-major */
+//	matrixPtr[0] = mv[0]; matrixPtr[4] = mv[4]; matrixPtr[8] = mv[8]; matrixPtr[12] = origin.x();
+//	matrixPtr[1] = mv[1]; matrixPtr[5] = mv[5]; matrixPtr[9] = mv[9]; matrixPtr[13] = origin.y();
+//	matrixPtr[2] = mv[2]; matrixPtr[6] = mv[6]; matrixPtr[10] = mv[10]; matrixPtr[14] = origin.z();
+//	matrixPtr[3] = 0; matrixPtr[7] = 0; matrixPtr[11] = 0; matrixPtr[15] = 1;
+//}
+
+inline static void convertTfTransformToHomogeniousMatrix (const tf2::Stamped<btTransform>& tfTransform, brics_3d::IHomogeneousMatrix44::IHomogeneousMatrix44Ptr& transformMatrix)
 {
-	double mv[12];
+	btScalar mv[12];
 	tfTransform.getBasis().getOpenGLSubMatrix(mv);
-	tf::Vector3 origin = tfTransform.getOrigin();
+	btVector3 origin = tfTransform.getOrigin();
 	double* matrixPtr = transformMatrix->setRawData();
 
 	/* matrices are column-major */
@@ -68,6 +89,7 @@ inline static void convertTfTransformToHomogeniousMatrix (const tf::Transform& t
 	matrixPtr[2] = mv[2]; matrixPtr[6] = mv[6]; matrixPtr[10] = mv[10]; matrixPtr[14] = origin.z();
 	matrixPtr[3] = 0; matrixPtr[7] = 0; matrixPtr[11] = 0; matrixPtr[15] = 1;
 }
+
 
 /**
  * @brief Class that encapsualtes the application.
@@ -103,13 +125,17 @@ public:
 		tfRootNode = "base_link";
 		enableFrameAutoDiscovery = true;
 
-		tfListener.addTransformsChangedListener(boost::bind(&WorldModelNode::processTfTopic, this));
+		tfUpdateListener = new tf2_ros::TransformListener(tfListener);
+		tfListener._addTransformsChangedListener(boost::bind(&WorldModelNode::processTfTopic, this));
 	}
 
 	virtual ~WorldModelNode() {
 		delete garbageCollector;
 		if (graphResender) {
 			delete graphResender;
+		}
+		if (tfUpdateListener) {
+			delete tfUpdateListener;
 		}
 	}
 
@@ -158,9 +184,42 @@ public:
 
 	}
 
+	void updateTfTopology() {
+		/* Workaround based on string parsing */
+		//		Frame robot_1 exists with parent wgs84.
+		//		Frame robot_1_base_link exists with parent robot_1.
+		//		Frame robot_2 exists with parent wgs84.
+		std::stringstream  tfTreeAsString(tfListener.allFramesAsString());
+		std::string  line;
+		while(std::getline(tfTreeAsString, line)) {
+//			LOG(DEBUG) << "tfTreeAsString " << line;
+			std::vector<string> segments;
+			boost::split(segments, line, boost::is_any_of(" "));
+			string child  = segments[1];
+			string parent = segments[5];
+			parent.erase( parent.end()-1 ); //remove the the "." e.g. robot_1. to robot_1
+			LOG(DEBUG) << "tfTreeAsStringSegments " << child << " has parent " << parent;
+			if(tfChildToParentMap.find(child) == tfChildToParentMap.end()) {
+				tfChildToParentMap.insert(std::make_pair(child, parent));
+				LOG(DEBUG) << "Adding to tfChildToParentMap" << child << " has parent " << parent;
+			}
+		}
+	}
+
+	bool getTFParent(const std::string& frameId, ros::Time time, std::string& parent) {
+		if(tfChildToParentMap.find(frameId) != tfChildToParentMap.end()) { // iff found, then it has a parent
+			std::map <std::string, std::string>::iterator parentIter = tfChildToParentMap.find(frameId);
+			parent = parentIter->second;
+			return true;
+		} else {
+			return false;
+		}
+	}
+
 	void addAllRecievedTFFramesToWorldModel() {
 		std::vector<std::string> frameIds;
-		tfListener.getFrameStrings(frameIds);
+		tfListener._getFrameStrings(frameIds);
+		updateTfTopology();
 
 		/*
 		 * Treverse in topological order:
@@ -168,10 +227,14 @@ public:
 		 */
 		for (std::vector<std::string>::iterator iter = frameIds.begin(); iter != frameIds.end(); iter++) {
 			LOG(INFO) << "FrameId: " << *iter;
-			string parent;
-			if(!tfListener.getParent(*iter, ros::Time::now(), parent)) {
+			string parent = "unknown";
+
+//			if(!tfListener._getParent(*iter, ros::Time::now(), parent)) { //this one does not work!
+			if(!getTFParent(*iter, ros::Time::now(), parent)) { //this one does not work!
 				LOG(INFO) << "\t is a root.";
 			}
+			LOG(DEBUG) << " has parent = " << parent;
+
 
 			/* check if frame exists already */
 			if (!tfNodeExistsInWorldModel(*iter)) {
@@ -180,7 +243,7 @@ public:
 			}
 		}
 		LOG(INFO) << tfListener.allFramesAsString();
-		LOG(INFO) << tfListener.allFramesAsDot();
+		LOG(INFO) << tfListener._allFramesAsDot();
 
 	}
 
@@ -204,7 +267,8 @@ public:
 		string parentId;
 
 		/* Handle root node i.e. with "NO_PARENT" frame_id */
-		if(!tfListener.getParent(frameId, ros::Time::now(), parentId)) {
+//		if(!tfListener._getParent(frameId, ros::Time::now(), parentId)) { // does not work
+		if(!getTFParent(frameId, ros::Time::now(), parentId)) {
 			LOG(INFO) << "addNewTfToWorldModel: " << frameId << " is a root node.";
 			return;
 		}
@@ -245,16 +309,19 @@ public:
 
 			std::string tfFrameId = iter->first;
 			std::string tfFrameReferenceId = iter->second.tfParent;
-			tf::StampedTransform transform;
+//			tf::StampedTransform transform;
+//			tf2::Stamped<btTransform> transform;
+			geometry_msgs::TransformStamped transform;
 			try{
-				tfListener.lookupTransform(tfFrameReferenceId, tfFrameId, ros::Time(0), transform);
+//				tfListener.lookupTransform(tfFrameReferenceId, tfFrameId, ros::Time(0), transform);
+				transform = tfListener.lookupTransform(tfFrameReferenceId, tfFrameId, ros::Time(0));
 			}
 			catch (tf::TransformException ex){
 				ROS_WARN("%s",ex.what());
 				continue;
 			}
 
-			if ( (ros::Time::now() - transform.stamp_) > maxTFCacheDuration ) { //simply ignore outdated TF frames
+			if ( (ros::Time::now() - transform.header.stamp) > maxTFCacheDuration ) { //simply ignore outdated TF frames
 				ROS_WARN("TF found for %s. But it is outdated. Skipping it.", iter->first.c_str());
 				continue;
 			}
@@ -291,7 +358,9 @@ public:
 			/* do the update */
 			ROS_INFO("updating transform");
 			brics_3d::HomogeneousMatrix44::IHomogeneousMatrix44Ptr transformUpdate(new brics_3d::HomogeneousMatrix44());
-			convertTfTransformToHomogeniousMatrix(transform, transformUpdate);
+//			tf2::Stamped<btTransform> btTransform;
+//			tf2::convert(transform, btTransform);
+//			convertTfTransformToHomogeniousMatrix(btTransform, transformUpdate);
 			std::cout << *transformUpdate;
 
 			if (!wm->scene.setTransform(iter->second.id, transformUpdate, wm->now())) {
@@ -324,7 +393,9 @@ private:
 	OutdatedDataIdAwareDeleter* garbageCollector;
 
 	/// Receives TF
-	tf::TransformListener tfListener;
+//	tf::TransformListener tfListener;
+	tf2_ros::Buffer tfListener;
+	tf2_ros::TransformListener* tfUpdateListener;
 
 	ros::Duration maxTFCacheDuration;
 
@@ -338,6 +409,9 @@ private:
 	/// Typical values are "base_link", "map" or "odom"	.
 	/// Deafault is "base_link".
 	std::string tfRootNode;
+
+	/// Store the topology of a td tree to. This ia a workaround to the tf API.
+	std::map <std::string, std::string> tfChildToParentMap;
 
 public:
 
@@ -391,7 +465,10 @@ int main(int argc, char **argv)
 	wm->scene.advertiseRootNode(); 				// required by visualizer
 #endif
 
-	wmNode.setTfRootNode("base_link");
+	wmNode.setTfRootNode("base_link"); // TODO param server
+	wmNode.setTfRootNode("wgs84");
+//	wmNode.setTfRootNode("world");
+//	wmNode.setTfRootNode("robot_1");
 	wmNode.sceneSetup();
 
 	RsgToTFObserver rsgToTf(wm);
