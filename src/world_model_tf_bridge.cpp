@@ -358,11 +358,7 @@ public:
 			/* do the update */
 			ROS_INFO("updating transform");
 			brics_3d::HomogeneousMatrix44::IHomogeneousMatrix44Ptr transformUpdate(new brics_3d::HomogeneousMatrix44());
-//			btTransform tmpBtTransform;
-//			tf2::convert(transform, btTransform);
-//			const geometry_msgs::TransformStamped constTransform = transform;
 			btTransform tmpBtTransform = tf2::transformToBullet(transform);
-
 			tf2::Stamped<btTransform> btStampedTransform;
 			btStampedTransform.setData(tmpBtTransform);
 			convertTfTransformToHomogeniousMatrix(btStampedTransform, transformUpdate);
@@ -432,6 +428,13 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "world_model_tf_bridge");
 	ros::NodeHandle node;
 
+	/* parameters */
+	bool enableDotVisualizer;
+	string rootFrameId;
+
+	node.param("enable_dot_visualizer", enableDotVisualizer, false);
+	node.param<std::string>("root_frame_id", rootFrameId, "base_link");
+
 
 	/* Define logger level for world model */
 	brics_3d::Logger::setMinLoglevel(brics_3d::Logger::LOGDEBUG);
@@ -442,7 +445,10 @@ int main(int argc, char **argv)
 
 	/* Attach additional debug output to the world model */
 	brics_3d::rsg::DotVisualizer structureVisualizer(&wm->scene);
-	wm->scene.attachUpdateObserver(&structureVisualizer);
+	if (enableDotVisualizer) {
+		LOG(INFO) << "DotVisualizer is enabled.";
+		wm->scene.attachUpdateObserver(&structureVisualizer);
+	}
 
 	/* Connect input port to world model */
 	brics_3d::rsg::HDF5UpdateDeserializer* inDeserializer = new brics_3d::rsg::HDF5UpdateDeserializer(wm);
@@ -470,10 +476,10 @@ int main(int argc, char **argv)
 	wm->scene.advertiseRootNode(); 				// required by visualizer
 #endif
 
-	wmNode.setTfRootNode("base_link"); // TODO param server
-	wmNode.setTfRootNode("wgs84");
-//	wmNode.setTfRootNode("world");
-//	wmNode.setTfRootNode("robot_1");
+	LOG(INFO) << "Using "<< rootFrameId << " as root of the TF tree. Only frames below this root are considered within the bridge.";
+	wmNode.setTfRootNode(rootFrameId);
+//	wmNode.setTfRootNode("wgs84");
+
 	wmNode.sceneSetup();
 
 	RsgToTFObserver rsgToTf(wm);
