@@ -18,7 +18,6 @@ Compilation
 
 ```
  $ catkin_make -DUSE_OSG=ON
-
 ```
 
 Environment Variables
@@ -45,9 +44,29 @@ To start the example do the following:
 rosrun sherpa_world_model_tf_bridge sherpa_world_model_tf_bridge
 ```
 
-The system will be _initialized_. To actually _start_ it go to the web interface at 
-localhost:8888 and click on all dark green _start_ buttons.
+On another terminal start the simulated robots with:
 
+```
+rosrun sherpa_world_model_tf_bridge robot_1_tf_broadcasr.py 
+rosrun sherpa_world_model_tf_bridge robot_2_tf_broadcasr.py 
+```
+
+Parameters
+----------
+
+Parameters can be configured with the rosparam tool. The following parameters are available:
+
+|  Prameter name          | Default     | Description |
+| ----------------------- | ----------- | ----------- |
+| root_frame_id           | "base_link" | Only TF frames below this root ID are considered within the bridge. |
+| enable_dot_visualizer   | false       | If set to true dot files are generated for **every** update on the RSG. |
+
+Examples are:
+
+```
+rosparam set /enable_dot_visualizer true
+rosparam set /root_frame_id "wgs84"
+```
 
 Licensing
 ---------
@@ -62,7 +81,7 @@ Impressum
 ---------
 
 Written by Sebastian Blumenthal (blumenthal@locomotec.com)
-Last update: 15.04.2015
+Last update: 19.06.2015
  
 
 
