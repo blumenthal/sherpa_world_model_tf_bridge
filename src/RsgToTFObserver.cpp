@@ -126,7 +126,7 @@ bool RsgToTFObserver::addConnection(Id parentId, Id& assignedId, vector<Attribut
 }
 
 bool RsgToTFObserver::setNodeAttributes(Id id,
-		vector<Attribute> newAttributes) {
+		vector<Attribute> newAttributes, TimeStamp timeStamp ) {
 
 	return true;
 }
