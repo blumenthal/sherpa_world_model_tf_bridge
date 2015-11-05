@@ -41,6 +41,8 @@ Usage
 To start the example do the following:
 
 ```
+rosparam set /enable_dot_visualizer true
+rosparam set /root_frame_id "wgs84"
 rosrun sherpa_world_model_tf_bridge sherpa_world_model_tf_bridge
 ```
 
@@ -50,6 +52,20 @@ On another terminal start the simulated robots with:
 rosrun sherpa_world_model_tf_bridge robot_1_tf_broadcasr.py 
 rosrun sherpa_world_model_tf_bridge robot_2_tf_broadcasr.py 
 ```
+
+The scene can be viewed in the Open Scene Graph window (if proper compile time flags have been set) and
+the ``rviz`` visualization tool as provided by ROS side by side:
+
+![3D viaualistion of RSG and TF tree.](doc/example_3d_view.png)  
+
+For debugging purposes the resulting Robot Scene Graph is stored in a *dot* file format (``current_graph.gv``).  
+It can be rendered with the ``dot`` tool that is part of the *graphviz* package e.g.
+
+```
+	dot current_graph.gv -Tsvg -o current_graph.gv.svg
+```
+
+![Resulting Robot Scene Graph](doc/example_graph.png)
 
 Parameters
 ----------
