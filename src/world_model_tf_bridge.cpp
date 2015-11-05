@@ -442,6 +442,9 @@ int main(int argc, char **argv)
 
 	/* Create an empty world model */
 	brics_3d::WorldModel* wm = new brics_3d::WorldModel();
+	vector<Attribute> rootNodeAttributes;
+	rootNodeAttributes.push_back(Attribute("name", "ros_tf:root_node"));
+	wm->scene.setNodeAttributes(wm->getRootNodeId(), rootNodeAttributes);
 
 	/* Attach additional debug output to the world model */
 	brics_3d::rsg::DotVisualizer structureVisualizer(&wm->scene);
@@ -472,6 +475,9 @@ int main(int argc, char **argv)
 #ifdef ENABLE_OSG
 	//Visualization tool for world model
 	brics_3d::rsg::OSGVisualizer* wmObserver = new brics_3d::rsg::OSGVisualizer(); // can segfault
+	brics_3d::rsg::VisualizationConfiguration osgConfig;
+	osgConfig.visualizeIds = false;
+	wmObserver->setConfig(osgConfig);
 	wm->scene.attachUpdateObserver(wmObserver); // enable visualization
 	wm->scene.advertiseRootNode(); 				// required by visualizer
 #endif
@@ -500,7 +506,7 @@ int main(int argc, char **argv)
 		wmNode.processTfTopic();
 		LOG(INFO) << "Resending complete graph.";
 		wmNode.graphResender->reset();
-        wm->scene.executeGraphTraverser(wmNode.graphResender , wm->scene.getRootId());
+        wm->scene.executeGraphTraverser(wmNode.graphResender, wm->scene.getRootId());
 		rate.sleep();
 	}
 
